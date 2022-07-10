@@ -227,8 +227,9 @@ function App() {
                 </HStack>
               )}
             </Box>
-
-            <Control walletConnect={walletConnect}></Control>
+            {isConnect ? (
+              <Control walletConnect={walletConnect}></Control>
+            ) : null}
           </VStack>
         </Container>
       </Box>

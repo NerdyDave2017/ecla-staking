@@ -18,10 +18,11 @@ function Index({
   onClose,
   actionName,
   title,
+  ...props
 }) {
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={onClose} {...props} isCentered>
         <ModalOverlay />
         <ModalContent bg="#1D1E21" color="#fff">
           <ModalHeader>{title}</ModalHeader>

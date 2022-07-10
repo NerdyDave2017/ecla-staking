@@ -1,17 +1,32 @@
-import React, { useState, useEffect } from "react";
-import { Heading, Text, HStack, VStack, Spinner } from "@chakra-ui/react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  Spinner,
+  useDisclosure,
+  FormControl,
+  FormLabel,
+  Input,
+} from "@chakra-ui/react";
 import { ethers } from "ethers";
 import Button from "../Button";
 import Card from "../card";
+import Modal from "../Modal";
 
 import EclaStaking from "../../abis/EclaStaking.json";
 import Ecla from "../../abis/Ecla.json";
 
-function Index({ walletConnect }) {
+function Control({ walletConnect }) {
+  const [loading, setLoading] = useState(false);
   const [userDetails, setUserDetails] = useState({});
-  const [userRewards, setUserRewards] = useState("");
-  const [userTokenBalance, setUserTokenBalance] = useState("");
-  const [minStakePeriod, setMinStakePeriod] = useState("");
+  const [userRewards, setUserRewards] = useState(0);
+  const [userTokenBalance, setUserTokenBalance] = useState(0);
+  const [minStakePeriod, setMinStakePeriod] = useState(0);
+
+  const [stakeAmount, setStakeAmount] = useState(0);
+  const [withdrawAmount, setWithdrawAmount] = useState(0);
 
   const [seconds, setSeconds] = useState(0);
   const [minutes, setMinutes] = useState(0);
@@ -19,11 +34,25 @@ function Index({ walletConnect }) {
   const [days, setDays] = useState(0);
 
   useEffect(() => {
+    setLoading(true);
     availableRewards();
     stakerDetails();
     tokenBalance();
-    calculateDuration();
+    getStakingDuration();
+    setLoading(false);
   }, [walletConnect]);
+
+  useEffect(() => {
+    startTimer();
+    // // countdownTimer();
+    return () => {
+      clearInterval(interval.current);
+    };
+  }, []);
+
+  const { isOpen, onOpen, onClose } = useDisclosure();
+
+  let interval = useRef();
 
   const isConnect = Boolean(walletConnect[0]);
   const eclaStaking = "0x92eeD80959Bc36e12dC4998D389be5f577526B32";
@@ -44,7 +73,7 @@ function Index({ walletConnect }) {
         walletConnect[0]
       );
       console.log(result.toString());
-      setUserRewards(result.toString());
+      setUserRewards(parseInt(result.toString()));
     }
   };
 
@@ -66,10 +95,23 @@ function Index({ walletConnect }) {
       const result = await stakingContract.functions.stakers(walletConnect[0]);
       console.log(result);
       setUserDetails({
-        amountStaked: result[0].toString(),
-        timeOfLastUpdate: result[1].toString(),
-        unclaimedRewards: result[2].toString(),
+        amountStaked: parseInt(result[0].toString()),
+        timeOfLastUpdate: parseInt(result[1].toString()),
+        unclaimedRewards: parseInt(result[2].toString()),
       });
+    }
+  };
+  const getStakingDuration = async () => {
+    console.log(walletConnect[0]);
+    if (typeof window.ethereum !== "undefined") {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const stakingContract = new ethers.Contract(
+        eclaStaking,
+        EclaStaking.abi,
+        signer
+      );
 
       const stakingPeriod = await stakingContract.minimumStakePeriod();
       console.log(stakingPeriod.toNumber() / 60 / 60 / 24);
@@ -90,13 +132,20 @@ function Index({ walletConnect }) {
       );
 
       // Approve the contract to spend the token
-      await tokenContract.functions.approve(
+      const amountToApprove = stakeAmount * 10;
+      const approve = await tokenContract.functions.approve(
         eclaStaking,
-        ethers.utils.parseEther("1")
+        ethers.utils.parseEther(stakeAmount + `${amountToApprove}`)
       );
-
-      // Stake the token
-      await stakingContract.functions.stake(ethers.utils.parseEther("1"));
+      if (approve) {
+        // Stake the token
+        const result = await stakingContract.functions.stake(
+          ethers.utils.parseEther(stakeAmount)
+        );
+        console.log(result);
+        availableRewards();
+        onClose();
+      }
     }
   };
 
@@ -104,6 +153,16 @@ function Index({ walletConnect }) {
     if (typeof window.ethereum !== "undefined") {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
+      const stakingContract = new ethers.Contract(
+        eclaStaking,
+        EclaStaking.abi,
+        signer
+      );
+
+      const result = await stakingContract.functions.withdraw(
+        ethers.utils.parseEther
+      );
+      console.log(result);
     }
   };
 
@@ -111,6 +170,33 @@ function Index({ walletConnect }) {
     if (typeof window.ethereum !== "undefined") {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
+
+      const stakingContract = new ethers.Contract(
+        eclaStaking,
+        EclaStaking.abi,
+        signer
+      );
+
+      const result = await stakingContract.functions.unStake();
+      console.log(result);
+      availableRewards();
+    }
+  };
+
+  const claimRewards = async () => {
+    console.log("claiming rewards");
+    if (typeof window.ethereum !== "undefined") {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const stakingContract = new ethers.Contract(
+        eclaStaking,
+        EclaStaking.abi,
+        signer
+      );
+
+      const result = await stakingContract.functions.claimRewards();
+      console.log(result);
+      availableRewards();
     }
   };
 
@@ -120,72 +206,83 @@ function Index({ walletConnect }) {
       const signer = provider.getSigner();
 
       const tokenContract = new ethers.Contract(eclaToken, Ecla.abi, signer);
-
-      const result = await tokenContract.balanceOf(walletConnect[0]);
-      console.log(result.toString());
-      setUserTokenBalance(result.toString());
+      const result = await tokenContract.functions.balanceOf(walletConnect[0]);
+      setUserTokenBalance(parseInt(result.toString()));
     }
   };
 
-  const calculateDuration = async () => {
-    const now = new Date().getTime();
-    const lastUpdate = Number(userDetails.timeOfLastUpdate) * 1000; // convert to milliseconds
-    const diff = now - lastUpdate;
+  const startTimer = async () => {
+    console.log(minStakePeriod, userDetails.timeOfLastUpdate);
+    let duration = minStakePeriod * 1000;
+    let dateStaked = userDetails.timeOfLastUpdate * 1000;
 
-    const stakingDuration = Number(minStakePeriod * 1000); // convert to milliseconds
-    console.log(stakingDuration);
+    let countDownDate = dateStaked + duration;
+    console.log(countDownDate);
+    console.log(new Date(countDownDate));
 
-    const dateToClaim = lastUpdate + stakingDuration;
-    console.log(new Date(now), new Date(lastUpdate), new Date(dateToClaim));
-    console.log(now, lastUpdate, dateToClaim - now);
-    console.log(now, lastUpdate, dateToClaim);
-    // Update the count down every 1 second
-    let x = setInterval(function () {
-      // Get today's date and time
-      let now = new Date().getTime();
+    interval = setInterval(() => {
+      const now = new Date().getTime();
+      const distance = countDownDate - now;
 
-      // Find the distance between now and the count down date
-      let distance = dateToClaim - now;
-
-      // Time calculations for days, hours, minutes and seconds
-      let days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      let hours = Math.floor(
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor(
         (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
-      let minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      let seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-      setSeconds(seconds);
-      setMinutes(minutes);
-      setHours(hours);
-      setDays(days);
-
-      // If the count down is finished, write some text
-      // if (distance < 0) {
-      //   clearInterval(x);
-      //   document.getElementById("demo").innerHTML = "EXPIRED";
-      // }
+      if (distance < 0) {
+        // stop our timer
+        clearInterval(interval.current);
+      } else {
+        // update timer
+        setDays(days);
+        setHours(hours);
+        setMinutes(minutes);
+        setSeconds(seconds);
+      }
     }, 1000);
   };
 
   return (
     <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        action={stake}
+        actionName="Stake"
+      >
+        <FormControl>
+          <FormLabel>Enter Amount</FormLabel>
+          <Input
+            label="amount"
+            value={stakeAmount}
+            onChange={(e) => setStakeAmount(e.target.value)}
+            placeholder=""
+            type="text"
+          />
+        </FormControl>
+      </Modal>
+
       <HStack>
         <Card>
           <VStack align="center" justify="center">
             <Text color="#3facfc" fontSize="lg">
               Total Staked
             </Text>
-            <Spinner
-              thickness="4px"
-              speed="0.65s"
-              emptyColor="gray.200"
-              color="blue.500"
-              size="xl"
-            />
-            <Heading as="h2" size="lg" color="#fff">
-              {userDetails.amountStaked / 10 ** 18} ECLA
-            </Heading>
+            {loading ? (
+              <Spinner
+                thickness="4px"
+                speed="0.65s"
+                emptyColor="gray.200"
+                color="blue.500"
+                size="xl"
+              />
+            ) : (
+              <Heading as="h2" size="lg" color="#fff">
+                {isConnect ? userDetails.amountStaked / 10 ** 18 : 0} ECLA
+              </Heading>
+            )}
           </VStack>
         </Card>
         <Card>
@@ -193,9 +290,19 @@ function Index({ walletConnect }) {
             <Text color="#3facfc" fontSize="lg">
               Available Reward
             </Text>
-            <Heading as="h2" size="lg" color="#fff">
-              {userRewards} ECLA
-            </Heading>
+            {loading ? (
+              <Spinner
+                thickness="4px"
+                speed="0.65s"
+                emptyColor="gray.200"
+                color="blue.500"
+                size="xl"
+              />
+            ) : (
+              <Heading as="h2" size="lg" color="#fff">
+                {isConnect ? userRewards / 10 ** 18 : 0} ECLA
+              </Heading>
+            )}
           </VStack>
         </Card>
         <Card>
@@ -203,24 +310,36 @@ function Index({ walletConnect }) {
             <Text color="#3facfc" fontSize="lg">
               Staking Duration
             </Text>
-            <Heading as="h2" size="lg" color="#fff">
-              {days}D {hours}H {minutes}M {seconds}S
-            </Heading>
+            {loading ? (
+              <Spinner
+                thickness="4px"
+                speed="0.65s"
+                emptyColor="gray.200"
+                color="blue.500"
+                size="xl"
+              />
+            ) : (
+              <Heading as="h2" size="lg" color="#fff">
+                {isConnect
+                  ? `${days}D ${hours}H ${minutes}M ${seconds}S`
+                  : `0D 0H 0M 0S`}
+              </Heading>
+            )}
           </VStack>
         </Card>
       </HStack>
 
       <HStack>
-        <Button>Stake</Button>
-        <Button>Withdraw</Button>
-        <Button>Claim</Button>
+        <Button onClick={onOpen}>Stake</Button>
+        <Button onClick={unstake}>Withdraw</Button>
+        <Button onClick={claimRewards}>Claim</Button>
       </HStack>
 
       <Heading as="h5" size="md" color="#fff">
-        Token Balance : {userTokenBalance / 10 ** 18} ECLA
+        Token Balance : {isConnect ? userTokenBalance / 10 ** 18 : 0} ECLA
       </Heading>
     </>
   );
 }
 
-export default Index;
+export default Control;
