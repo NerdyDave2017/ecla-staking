@@ -18,6 +18,8 @@ import Button from "./components/Button";
 import Card from "./components/card";
 import Modal from "./components/Modal";
 
+import Control from "./components/Control";
+
 import "./App.css";
 
 function App() {
@@ -226,44 +228,7 @@ function App() {
               )}
             </Box>
 
-            <HStack>
-              <Card>
-                <VStack align="center" justify="center">
-                  <Text color="#3facfc" fontSize="lg">
-                    Total Staked
-                  </Text>
-                  <Heading as="h2" size="lg" color="#fff">
-                    200 ECLA
-                  </Heading>
-                </VStack>
-              </Card>
-              <Card>
-                <VStack align="center" justify="center">
-                  <Text color="#3facfc" fontSize="lg">
-                    Available Reward
-                  </Text>
-                  <Heading as="h2" size="lg" color="#fff">
-                    0.32 ECLA
-                  </Heading>
-                </VStack>
-              </Card>
-              <Card>
-                <VStack align="center" justify="center">
-                  <Text color="#3facfc" fontSize="lg">
-                    Staking Duration
-                  </Text>
-                  <Heading as="h2" size="lg" color="#fff">
-                    20H 15M 17S
-                  </Heading>
-                </VStack>
-              </Card>
-            </HStack>
-
-            <HStack>
-              <Button>Stake</Button>
-              <Button>Withdraw</Button>
-              <Button>Claim</Button>
-            </HStack>
+            <Control walletConnect={walletConnect}></Control>
           </VStack>
         </Container>
       </Box>
